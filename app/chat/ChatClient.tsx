@@ -79,9 +79,14 @@ export default function ChatClient({ user }: ChatClientProps) {
     fetchThreads();
   }, []);
 
-  // Load messages when thread changes
+  // Load messages when thread changes (but not when we just created it in sendMessage)
+  const skipNextFetchRef = useRef(false);
   useEffect(() => {
     if (currentThreadId) {
+      if (skipNextFetchRef.current) {
+        skipNextFetchRef.current = false;
+        return;
+      }
       fetchMessages(currentThreadId);
     }
   }, [currentThreadId]);
@@ -136,7 +141,16 @@ export default function ChatClient({ user }: ChatClientProps) {
         const res = await fetch('/api/chat/threads', { method: 'POST' });
         const data = await res.json();
         threadId = data.thread.id;
+        // Skip the automatic fetchMessages since we'll add messages locally
+        skipNextFetchRef.current = true;
         setCurrentThreadId(threadId);
+        // Add welcome message manually
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: data.welcomeMessage || 'Ola! Em que posso ajudar?',
+          createdAt: new Date().toISOString(),
+        }]);
       } catch (error) {
         console.error('Error creating thread:', error);
         return;
