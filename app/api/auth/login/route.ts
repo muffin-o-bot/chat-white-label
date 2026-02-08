@@ -15,14 +15,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash the provided code
-    const codeHash = createHash('sha256').update(code.trim().toUpperCase()).digest('hex');
+    const trimmedCode = code.trim();
+    const upperCode = trimmedCode.toUpperCase();
 
-    // Find access code in database
-    const accessCode = await prisma.accessCode.findUnique({
+    // Hash the provided code
+    const codeHash = createHash('sha256').update(upperCode).digest('hex');
+
+    // Try to find by hash first, then by label (case-insensitive alias)
+    let accessCode = await prisma.accessCode.findUnique({
       where: { codeHash },
       include: { user: true },
     });
+
+    // If not found by hash, try by label (allows "Luis" instead of "LUIS-22AA44")
+    if (!accessCode) {
+      accessCode = await prisma.accessCode.findFirst({
+        where: { 
+          label: { equals: trimmedCode, mode: 'insensitive' },
+          active: true,
+        },
+        include: { user: true },
+      });
+    }
 
     if (!accessCode || !accessCode.active) {
       return NextResponse.json(

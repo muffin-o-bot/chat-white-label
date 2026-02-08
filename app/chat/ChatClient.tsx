@@ -480,16 +480,34 @@ export default function ChatClient({ user }: ChatClientProps) {
               {attachments.map((file, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-2 px-3 py-2 bg-surface-alt rounded-lg text-sm"
+                  className="relative group"
                 >
-                  {getFileIcon(file)}
-                  <span className="truncate max-w-[150px]">{file.name}</span>
-                  <button
-                    onClick={() => removeAttachment(index)}
-                    className="text-muted hover:text-red-400"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  {file.type.startsWith('image/') ? (
+                    <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-surface-alt">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        onClick={() => removeAttachment(index)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-surface-alt rounded-lg text-sm">
+                      {getFileIcon(file)}
+                      <span className="truncate max-w-[150px]">{file.name}</span>
+                      <button
+                        onClick={() => removeAttachment(index)}
+                        className="text-muted hover:text-red-400"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
