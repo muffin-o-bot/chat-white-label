@@ -72,33 +72,24 @@ export async function POST(request: NextRequest) {
     }));
 
     // Build user message with attachments if present
-    // AI SDK format: https://sdk.vercel.ai/docs/foundations/prompts#multi-modal-messages
-    type TextPart = { type: 'text'; text: string };
-    type FilePart = { type: 'file'; data: string; mimeType: string };
-    type ContentPart = TextPart | FilePart;
-    const userContent: ContentPart[] = [];
-    
-    // Check if we have audio attachments
+    // Check for audio/image attachments
     let hasAudio = false;
-    let audioData: string | null = null;
-    let audioMimeType: string | null = null;
+    let hasImage = false;
+    const fileContents: Array<{ type: 'file'; data: string; mimeType: string }> = [];
     
-    // Add attachments (audio/image) as file parts for Gemini
     if (attachments && attachments.length > 0) {
       for (const att of attachments) {
         if (att.data && att.type) {
           if (att.type.startsWith('audio/')) {
             hasAudio = true;
-            audioData = att.data;
-            audioMimeType = att.type;
-            // For audio, add as file part
-            userContent.push({
+            fileContents.push({
               type: 'file',
               data: `data:${att.type};base64,${att.data}`,
               mimeType: att.type,
             });
           } else if (att.type.startsWith('image/')) {
-            userContent.push({
+            hasImage = true;
+            fileContents.push({
               type: 'file',
               data: `data:${att.type};base64,${att.data}`,
               mimeType: att.type,
@@ -108,18 +99,29 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Add text content - if audio, ask to transcribe
+    // Build content array
+    const userContent: Array<{ type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string }> = [];
+    
+    // Add files first
+    userContent.push(...fileContents);
+    
+    // Add text with instructions for transcription if audio
     if (hasAudio) {
       userContent.push({ 
         type: 'text', 
-        text: message || 'Por favor, transcreva este audio e responda ao que foi dito.' 
+        text: message || 'Transcreva o audio acima e responda de forma natural ao que foi dito.' 
+      });
+    } else if (hasImage) {
+      userContent.push({ 
+        type: 'text', 
+        text: message || 'Descreva a imagem acima.' 
       });
     } else if (message) {
       userContent.push({ type: 'text', text: message });
     }
     
-    // Use multipart content if we have attachments, otherwise simple text
-    if (userContent.length > 0 && (hasAudio || userContent.some(p => p.type === 'file'))) {
+    // Use multipart content if we have files, otherwise simple text
+    if (fileContents.length > 0) {
       llmMessages.push({ role: 'user', content: userContent as any });
     } else {
       llmMessages.push({ role: 'user', content: message });
@@ -157,7 +159,12 @@ export async function POST(request: NextRequest) {
         let fullContent = '';
 
         try {
-          const model = personalization?.model || 'gemini-2.0-flash-001';
+          // Use gemini-1.5-pro for audio (better multimodal support)
+          const hasFiles = llmMessages.some(m => Array.isArray(m.content));
+          const model = hasFiles ? 'gemini-1.5-pro' : (personalization?.model || 'gemini-2.0-flash-001');
+          
+          console.log('Using model:', model, 'hasFiles:', hasFiles);
+          
           const result = await streamText({
             model: google(model),
             system: systemPrompt,
