@@ -559,10 +559,10 @@ export default function ChatClient({ user }: ChatClientProps) {
             </div>
           )}
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
             {/* Attachment button using label for better iOS support */}
             <label
-              className="px-3 py-3 bg-surface-alt hover:bg-gray-700 text-muted rounded-xl transition-colors cursor-pointer"
+              className="flex-shrink-0 px-3 py-3 bg-surface-alt hover:bg-gray-700 text-muted rounded-xl transition-colors cursor-pointer flex items-center justify-center"
               title="Anexar arquivo"
             >
               <Paperclip className="w-5 h-5" />
@@ -579,7 +579,7 @@ export default function ChatClient({ user }: ChatClientProps) {
             {/* Voice recording button */}
             <button
               onClick={toggleRecording}
-              className={`px-3 py-3 rounded-xl transition-colors flex items-center gap-2 ${
+              className={`flex-shrink-0 px-3 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${
                 isRecording 
                   ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
                   : 'bg-surface-alt hover:bg-gray-700 text-muted'
@@ -609,7 +609,7 @@ export default function ChatClient({ user }: ChatClientProps) {
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || streaming}
-              className="px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-shrink-0 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {streaming ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
