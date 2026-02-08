@@ -53,51 +53,24 @@ export default function ChatClient({ user }: ChatClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check speech recognition support
+  // Cleanup recording on unmount
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      setSpeechSupported(true);
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'pt-BR';
-      
-      recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-        
-        if (finalTranscript) {
-          setInput(prev => prev + finalTranscript);
-        }
-      };
-      
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsRecording(false);
-      };
-      
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-      
-      recognitionRef.current = recognition;
-    }
+    return () => {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    };
   }, []);
 
   // Load threads
@@ -303,15 +276,57 @@ export default function ChatClient({ user }: ChatClientProps) {
     return <FileText className="w-4 h-4" />;
   }
 
-  function toggleRecording() {
-    if (!recognitionRef.current) return;
-    
+  async function toggleRecording() {
     if (isRecording) {
-      recognitionRef.current.stop();
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
       setIsRecording(false);
+      setRecordingTime(0);
     } else {
-      recognitionRef.current.start();
-      setIsRecording(true);
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = async () => {
+          // Stop all tracks
+          stream.getTracks().forEach(track => track.stop());
+          
+          if (audioChunksRef.current.length > 0) {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            
+            // Add as attachment with transcription note
+            const audioFile = new File([audioBlob], `audio-${Date.now()}.webm`, { type: 'audio/webm' });
+            setAttachments(prev => [...prev, audioFile]);
+            setInput(prev => prev + (prev ? ' ' : '') + '[Audio gravado - clique enviar]');
+          }
+        };
+        
+        mediaRecorder.start(1000); // Collect data every second
+        setIsRecording(true);
+        
+        // Update recording time
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingTime(prev => prev + 1);
+        }, 1000);
+        
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        alert('Nao foi possivel acessar o microfone. Verifique as permissoes.');
+      }
     }
   }
 
@@ -488,7 +503,7 @@ export default function ChatClient({ user }: ChatClientProps) {
               multiple
               onChange={handleFileSelect}
               className="hidden"
-              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls"
+              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,audio/*,video/*"
             />
             
             {/* Attachment button */}
@@ -501,19 +516,24 @@ export default function ChatClient({ user }: ChatClientProps) {
             </button>
             
             {/* Voice recording button */}
-            {speechSupported && (
-              <button
-                onClick={toggleRecording}
-                className={`px-3 py-3 rounded-xl transition-colors ${
-                  isRecording 
-                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                    : 'bg-surface-alt hover:bg-gray-700 text-muted'
-                }`}
-                title={isRecording ? "Parar gravacao" : "Gravar audio"}
-              >
-                {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-            )}
+            <button
+              onClick={toggleRecording}
+              className={`px-3 py-3 rounded-xl transition-colors flex items-center gap-2 ${
+                isRecording 
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                  : 'bg-surface-alt hover:bg-gray-700 text-muted'
+              }`}
+              title={isRecording ? "Parar gravacao" : "Gravar audio"}
+            >
+              {isRecording ? (
+                <>
+                  <MicOff className="w-5 h-5" />
+                  <span className="text-sm">{recordingTime}s</span>
+                </>
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
+            </button>
             
             <textarea
               ref={inputRef}
