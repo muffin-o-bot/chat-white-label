@@ -70,7 +70,38 @@ export async function POST(request: NextRequest) {
       role: m.role as 'user' | 'assistant' | 'system',
       content: m.content,
     }));
-    llmMessages.push({ role: 'user', content: message });
+
+    // Build user message with attachments if present
+    type ContentPart = { type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string };
+    const userContent: ContentPart[] = [];
+    
+    // Add text content
+    if (message) {
+      userContent.push({ type: 'text', text: message });
+    }
+    
+    // Add attachments (audio/image) as file parts for Gemini
+    if (attachments && attachments.length > 0) {
+      for (const att of attachments) {
+        if (att.data && att.type) {
+          // Gemini supports audio and image files
+          if (att.type.startsWith('audio/') || att.type.startsWith('image/')) {
+            userContent.push({
+              type: 'file',
+              data: att.data,
+              mimeType: att.type,
+            });
+          }
+        }
+      }
+    }
+    
+    // Use multipart content if we have attachments, otherwise simple text
+    if (userContent.length > 1 || (userContent.length === 1 && userContent[0].type === 'file')) {
+      llmMessages.push({ role: 'user', content: userContent as any });
+    } else {
+      llmMessages.push({ role: 'user', content: message });
+    }
 
     // Create assistant message placeholder
     const assistantMessage = await prisma.chatMessage.create({

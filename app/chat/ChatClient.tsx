@@ -168,13 +168,34 @@ export default function ChatClient({ user }: ChatClientProps) {
     setMessages((prev) => [...prev, assistantPlaceholder]);
 
     try {
+      // Convert files to base64 for processing
+      const attachmentsWithData = await Promise.all(
+        currentAttachments.map(async (file) => {
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              // Remove data URL prefix to get just base64
+              resolve(result.split(',')[1] || '');
+            };
+            reader.readAsDataURL(file);
+          });
+          return {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: base64,
+          };
+        })
+      );
+
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           threadId,
           message: messageContent || `[Enviou ${currentAttachments.length} arquivo(s)]`,
-          attachments: currentAttachments.map(f => ({ name: f.name, type: f.type, size: f.size })),
+          attachments: attachmentsWithData,
         }),
       });
 
