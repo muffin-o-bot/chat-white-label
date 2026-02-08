@@ -13,6 +13,9 @@ import {
   Loader2,
   User,
   Bot,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface Message {
@@ -46,8 +49,10 @@ export default function ChatClient({ user }: ChatClientProps) {
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load threads
   useEffect(() => {
@@ -100,7 +105,7 @@ export default function ChatClient({ user }: ChatClientProps) {
   }
 
   const sendMessage = useCallback(async () => {
-    if (!input.trim() || streaming) return;
+    if ((!input.trim() && attachments.length === 0) || streaming) return;
 
     let threadId = currentThreadId;
 
@@ -117,15 +122,21 @@ export default function ChatClient({ user }: ChatClientProps) {
       }
     }
 
+    // Build message content with attachment info
+    let messageContent = input.trim();
+    const attachmentNames = attachments.map(f => f.name);
+    
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: messageContent + (attachmentNames.length > 0 ? `\n\n[Anexos: ${attachmentNames.join(', ')}]` : ''),
       createdAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentAttachments = [...attachments];
     setInput('');
+    setAttachments([]);
     setStreaming(true);
 
     // Add placeholder for assistant
@@ -143,7 +154,8 @@ export default function ChatClient({ user }: ChatClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           threadId,
-          message: userMessage.content,
+          message: messageContent || `[Enviou ${currentAttachments.length} arquivo(s)]`,
+          attachments: currentAttachments.map(f => ({ name: f.name, type: f.type, size: f.size })),
         }),
       });
 
@@ -208,7 +220,7 @@ export default function ChatClient({ user }: ChatClientProps) {
     } finally {
       setStreaming(false);
     }
-  }, [input, streaming, currentThreadId]);
+  }, [input, streaming, currentThreadId, attachments]);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -221,6 +233,28 @@ export default function ChatClient({ user }: ChatClientProps) {
       e.preventDefault();
       sendMessage();
     }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (files) {
+      setAttachments(prev => [...prev, ...Array.from(files)]);
+    }
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function getFileIcon(file: File) {
+    if (file.type.startsWith('image/')) {
+      return <ImageIcon className="w-4 h-4" />;
+    }
+    return <FileText className="w-4 h-4" />;
   }
 
   return (
@@ -367,7 +401,47 @@ export default function ChatClient({ user }: ChatClientProps) {
 
         {/* Input */}
         <div className="p-4 border-t border-gray-800">
+          {/* Attachments preview */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {attachments.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 px-3 py-2 bg-surface-alt rounded-lg text-sm"
+                >
+                  {getFileIcon(file)}
+                  <span className="truncate max-w-[150px]">{file.name}</span>
+                  <button
+                    onClick={() => removeAttachment(index)}
+                    className="text-muted hover:text-red-400"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="flex gap-2">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls"
+            />
+            
+            {/* Attachment button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-3 bg-surface-alt hover:bg-gray-700 text-muted rounded-xl transition-colors"
+              title="Anexar arquivo"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+            
             <textarea
               ref={inputRef}
               value={input}
@@ -380,7 +454,7 @@ export default function ChatClient({ user }: ChatClientProps) {
             />
             <button
               onClick={sendMessage}
-              disabled={!input.trim() || streaming}
+              disabled={(!input.trim() && attachments.length === 0) || streaming}
               className="px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {streaming ? (
