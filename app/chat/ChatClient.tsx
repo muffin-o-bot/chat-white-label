@@ -514,24 +514,21 @@ export default function ChatClient({ user }: ChatClientProps) {
           )}
           
           <div className="flex gap-2">
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,audio/*,video/*"
-            />
-            
-            {/* Attachment button */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-3 bg-surface-alt hover:bg-gray-700 text-muted rounded-xl transition-colors"
+            {/* Attachment button using label for better iOS support */}
+            <label
+              className="px-3 py-3 bg-surface-alt hover:bg-gray-700 text-muted rounded-xl transition-colors cursor-pointer"
               title="Anexar arquivo"
             >
               <Paperclip className="w-5 h-5" />
-            </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,audio/*,video/*"
+              />
+            </label>
             
             {/* Voice recording button */}
             <button
