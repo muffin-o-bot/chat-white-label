@@ -72,23 +72,35 @@ export async function POST(request: NextRequest) {
     }));
 
     // Build user message with attachments if present
-    type ContentPart = { type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string };
+    // AI SDK format: https://sdk.vercel.ai/docs/foundations/prompts#multi-modal-messages
+    type TextPart = { type: 'text'; text: string };
+    type FilePart = { type: 'file'; data: string; mimeType: string };
+    type ContentPart = TextPart | FilePart;
     const userContent: ContentPart[] = [];
     
-    // Add text content
-    if (message) {
-      userContent.push({ type: 'text', text: message });
-    }
+    // Check if we have audio attachments
+    let hasAudio = false;
+    let audioData: string | null = null;
+    let audioMimeType: string | null = null;
     
     // Add attachments (audio/image) as file parts for Gemini
     if (attachments && attachments.length > 0) {
       for (const att of attachments) {
         if (att.data && att.type) {
-          // Gemini supports audio and image files
-          if (att.type.startsWith('audio/') || att.type.startsWith('image/')) {
+          if (att.type.startsWith('audio/')) {
+            hasAudio = true;
+            audioData = att.data;
+            audioMimeType = att.type;
+            // For audio, add as file part
             userContent.push({
               type: 'file',
-              data: att.data,
+              data: `data:${att.type};base64,${att.data}`,
+              mimeType: att.type,
+            });
+          } else if (att.type.startsWith('image/')) {
+            userContent.push({
+              type: 'file',
+              data: `data:${att.type};base64,${att.data}`,
               mimeType: att.type,
             });
           }
@@ -96,8 +108,18 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Add text content - if audio, ask to transcribe
+    if (hasAudio) {
+      userContent.push({ 
+        type: 'text', 
+        text: message || 'Por favor, transcreva este audio e responda ao que foi dito.' 
+      });
+    } else if (message) {
+      userContent.push({ type: 'text', text: message });
+    }
+    
     // Use multipart content if we have attachments, otherwise simple text
-    if (userContent.length > 1 || (userContent.length === 1 && userContent[0].type === 'file')) {
+    if (userContent.length > 0 && (hasAudio || userContent.some(p => p.type === 'file'))) {
       llmMessages.push({ role: 'user', content: userContent as any });
     } else {
       llmMessages.push({ role: 'user', content: message });
