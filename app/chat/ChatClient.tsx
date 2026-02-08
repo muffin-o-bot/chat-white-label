@@ -16,6 +16,8 @@ import {
   Paperclip,
   FileText,
   Image as ImageIcon,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 
 interface Message {
@@ -50,9 +52,53 @@ export default function ChatClient({ user }: ChatClientProps) {
   const [streaming, setStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Check speech recognition support
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'pt-BR';
+      
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        if (finalTranscript) {
+          setInput(prev => prev + finalTranscript);
+        }
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+      };
+      
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+      
+      recognitionRef.current = recognition;
+    }
+  }, []);
 
   // Load threads
   useEffect(() => {
@@ -257,6 +303,18 @@ export default function ChatClient({ user }: ChatClientProps) {
     return <FileText className="w-4 h-4" />;
   }
 
+  function toggleRecording() {
+    if (!recognitionRef.current) return;
+    
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      recognitionRef.current.start();
+      setIsRecording(true);
+    }
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar Overlay (Mobile) */}
@@ -441,6 +499,21 @@ export default function ChatClient({ user }: ChatClientProps) {
             >
               <Paperclip className="w-5 h-5" />
             </button>
+            
+            {/* Voice recording button */}
+            {speechSupported && (
+              <button
+                onClick={toggleRecording}
+                className={`px-3 py-3 rounded-xl transition-colors ${
+                  isRecording 
+                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                    : 'bg-surface-alt hover:bg-gray-700 text-muted'
+                }`}
+                title={isRecording ? "Parar gravacao" : "Gravar audio"}
+              >
+                {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
+            )}
             
             <textarea
               ref={inputRef}
