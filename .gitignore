@@ -44,3 +44,4 @@ prisma/migrations/*_migration_lock.toml
 
 # Storage (local dev)
 storage/
+.env*.local

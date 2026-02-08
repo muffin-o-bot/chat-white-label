@@ -20,8 +20,24 @@ model User {
   personalization ChatPersonalization?
   data            Data[]
   files           File[]
+  accessCode      AccessCode?
 
   @@map("users")
+}
+
+model AccessCode {
+  id        String   @id @default(uuid())
+  code      String   @unique // codigo em texto (ex: "LUIS-ABC123")
+  codeHash  String   @unique // sha256 do codigo
+  userId    String   @unique
+  label     String?  // nome do amigo (ex: "Luis")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("access_codes")
 }
 
 model ChatThread {
