@@ -25,6 +25,7 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: string;
+  metadata?: unknown;
 }
 
 interface Thread {
@@ -115,7 +116,8 @@ export default function ChatClient({ user }: ChatClientProps) {
       const res = await fetch('/api/chat/threads', { method: 'POST' });
       const data = await res.json();
       setCurrentThreadId(data.thread.id);
-      setMessages([]);
+      // Fetch messages (includes welcome message)
+      await fetchMessages(data.thread.id);
       await fetchThreads();
       setSidebarOpen(false);
     } catch (error) {
@@ -462,34 +464,57 @@ export default function ChatClient({ user }: ChatClientProps) {
             </div>
           )}
 
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${
-                message.role === 'user' ? 'justify-end' : ''
-              }`}
-            >
-              {message.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-5 h-5 text-primary" />
-                </div>
-              )}
+          {messages.map((message) => {
+            // Parse metadata for attachments
+            const metadata = message.metadata as { attachments?: Array<{ name: string; type: string; data?: string }> } | null;
+            const attachments = metadata?.attachments || [];
+            
+            return (
               <div
-                className={`max-w-[80%] px-4 py-3 rounded-2xl ${
-                  message.role === 'user'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-alt text-heading'
+                key={message.id}
+                className={`flex gap-3 ${
+                  message.role === 'user' ? 'justify-end' : ''
                 }`}
               >
-                <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-              </div>
-              {message.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-gray-400" />
+                {message.role === 'assistant' && (
+                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-5 h-5 text-primary" />
+                  </div>
+                )}
+                <div
+                  className={`max-w-[80%] px-4 py-3 rounded-2xl ${
+                    message.role === 'user'
+                      ? 'bg-primary text-white'
+                      : 'bg-surface-alt text-heading'
+                  }`}
+                >
+                  {/* Show attachment previews */}
+                  {attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {attachments.map((att, idx) => (
+                        <div key={idx} className="flex items-center gap-1 text-xs opacity-80">
+                          {att.type?.startsWith('image/') ? (
+                            <ImageIcon className="w-3 h-3" />
+                          ) : att.type?.startsWith('audio/') ? (
+                            <Mic className="w-3 h-3" />
+                          ) : (
+                            <FileText className="w-3 h-3" />
+                          )}
+                          <span className="truncate max-w-[100px]">{att.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="whitespace-pre-wrap">{message.content || '...'}</p>
                 </div>
-              )}
-            </div>
-          ))}
+                {message.role === 'user' && (
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                    <User className="w-5 h-5 text-gray-400" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
