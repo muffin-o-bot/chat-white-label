@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         threadId,
         role: 'user',
         content: message,
-        metadata: attachments ? { attachments } : null,
+        metadata: attachments ? { attachments } : undefined,
       },
     });
 
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
         try {
           const model = personalization?.model || 'gemini-2.0-flash-001';
-          const result = streamText({
+          const result = await streamText({
             model: google(model),
             system: systemPrompt,
             messages: llmMessages,
