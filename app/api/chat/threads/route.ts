@@ -38,12 +38,30 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const title = body.title || null;
 
+  // Get user personalization for welcome message
+  const personalization = await prisma.chatPersonalization.findUnique({
+    where: { userId: user.id },
+  });
+
+  const displayName = personalization?.displayName || user.name || 'amigo';
+
   const thread = await prisma.chatThread.create({
     data: {
       userId: user.id,
-      title,
+      title: title || `Conversa com ${displayName}`,
     },
   });
 
-  return NextResponse.json({ thread });
+  // Create welcome message from assistant
+  const welcomeMessage = `Dae ${displayName}! Em que posso te ajudar?`;
+  
+  await prisma.chatMessage.create({
+    data: {
+      threadId: thread.id,
+      role: 'assistant',
+      content: welcomeMessage,
+    },
+  });
+
+  return NextResponse.json({ thread, welcomeMessage });
 }
