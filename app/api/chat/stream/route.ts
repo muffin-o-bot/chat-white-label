@@ -71,57 +71,32 @@ export async function POST(request: NextRequest) {
       content: m.content,
     }));
 
-    // Build user message with attachments if present
-    // Check for audio/image attachments
-    let hasAudio = false;
-    let hasImage = false;
-    const fileContents: Array<{ type: 'file'; data: string; mimeType: string }> = [];
+    // Build user message - images are sent inline, audio is pre-transcribed
+    type ContentPart = { type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string };
+    const userContent: ContentPart[] = [];
+    let hasFiles = false;
     
+    // Process image attachments only (audio is pre-transcribed on client)
     if (attachments && attachments.length > 0) {
       for (const att of attachments) {
-        if (att.data && att.type) {
-          if (att.type.startsWith('audio/')) {
-            hasAudio = true;
-            fileContents.push({
-              type: 'file',
-              data: `data:${att.type};base64,${att.data}`,
-              mimeType: att.type,
-            });
-          } else if (att.type.startsWith('image/')) {
-            hasImage = true;
-            fileContents.push({
-              type: 'file',
-              data: `data:${att.type};base64,${att.data}`,
-              mimeType: att.type,
-            });
-          }
+        if (att.data && att.type && att.type.startsWith('image/')) {
+          hasFiles = true;
+          userContent.push({
+            type: 'file',
+            data: `data:${att.type};base64,${att.data}`,
+            mimeType: att.type,
+          });
         }
       }
     }
     
-    // Build content array
-    const userContent: Array<{ type: 'text'; text: string } | { type: 'file'; data: string; mimeType: string }> = [];
-    
-    // Add files first
-    userContent.push(...fileContents);
-    
-    // Add text with instructions for transcription if audio
-    if (hasAudio) {
-      userContent.push({ 
-        type: 'text', 
-        text: message || 'Transcreva o audio acima e responda de forma natural ao que foi dito.' 
-      });
-    } else if (hasImage) {
-      userContent.push({ 
-        type: 'text', 
-        text: message || 'Descreva a imagem acima.' 
-      });
-    } else if (message) {
+    // Add text
+    if (message) {
       userContent.push({ type: 'text', text: message });
     }
     
-    // Use multipart content if we have files, otherwise simple text
-    if (fileContents.length > 0) {
+    // Use multipart if we have images
+    if (hasFiles && userContent.length > 0) {
       llmMessages.push({ role: 'user', content: userContent as any });
     } else {
       llmMessages.push({ role: 'user', content: message });
@@ -159,11 +134,9 @@ export async function POST(request: NextRequest) {
         let fullContent = '';
 
         try {
-          // Use gemini-1.5-pro for audio (better multimodal support)
-          const hasFiles = llmMessages.some(m => Array.isArray(m.content));
-          const model = hasFiles ? 'gemini-1.5-pro' : (personalization?.model || 'gemini-2.0-flash-001');
-          
-          console.log('Using model:', model, 'hasFiles:', hasFiles);
+          // Use gemini-1.5-pro for images (better multimodal support)
+          const hasImages = llmMessages.some(m => Array.isArray(m.content));
+          const model = hasImages ? 'gemini-1.5-pro' : (personalization?.model || 'gemini-2.0-flash-001');
           
           const result = await streamText({
             model: google(model),

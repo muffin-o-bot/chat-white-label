@@ -345,10 +345,37 @@ export default function ChatClient({ user }: ChatClientProps) {
           if (audioChunksRef.current.length > 0) {
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
             
-            // Add as attachment with transcription note
-            const audioFile = new File([audioBlob], `audio-${Date.now()}.webm`, { type: 'audio/webm' });
-            setAttachments(prev => [...prev, audioFile]);
-            setInput(prev => prev + (prev ? ' ' : '') + '[Audio gravado - clique enviar]');
+            // Show transcribing state
+            setInput('[Transcrevendo audio...]');
+            
+            try {
+              // Convert to base64
+              const base64 = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  resolve(result.split(',')[1] || '');
+                };
+                reader.readAsDataURL(audioBlob);
+              });
+              
+              // Transcribe using API
+              const res = await fetch('/api/transcribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audioData: base64, mimeType: 'audio/webm' }),
+              });
+              
+              if (res.ok) {
+                const data = await res.json();
+                setInput(data.transcription || '[Nao foi possivel transcrever]');
+              } else {
+                setInput('[Erro na transcricao]');
+              }
+            } catch (error) {
+              console.error('Transcription error:', error);
+              setInput('[Erro na transcricao]');
+            }
           }
         };
         
